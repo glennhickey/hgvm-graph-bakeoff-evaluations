@@ -148,7 +148,7 @@ function run_pipeline {
 
 # 1000 Genomes-like options fixed here for pileups
 #PILEUP_OPTS=" -w 40 -m 10 -q 10 -a"
-PILEUP_OPTS=" -q 10 -a"
+PILEUP_OPTS=" -q 10"
 #GLENN2VCF_OPTS="--depth 10 --max_het_bias 3 --min_count 1 -C 50"
 #GLENN2VCF_OPTS="--max_het_bias 3"
 # filter options (no secondary, primary must have > 90% identity and > 5% improvement over secondary)
