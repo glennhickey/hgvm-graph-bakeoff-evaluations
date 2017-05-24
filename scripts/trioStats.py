@@ -12,6 +12,7 @@ from callVariants import sample_vg_path, sample_txt_path, augmented_vg_path, ali
 from callVariants import graph_path, index_path, augmented_vg_path, linear_vg_path, linear_vcf_path, sample_vg_path
 from callVariants import alignment_region_tag, alignment_sample_tag, alignment_graph_tag, run
 from plotVariantsDistances import name_map
+from callStats import get_filter_string
 
 def parse_args(args):
     parser = argparse.ArgumentParser(description=__doc__, 
@@ -29,6 +30,8 @@ def parse_args(args):
                         help="fasta file with entire chromosome info for all regions")
     parser.add_argument("--clip", type=str, default=None,
                         help="bed regions to subset on")
+    parser.add_argument("--qual_dir", type=str, default=None,
+                        help="filter by given qualities.  should be tsv output folder of plotVariantsDistances.py")
                             
     args = args[1:]
         
@@ -86,10 +89,12 @@ def make_trio_vcfs(vcfmap, options):
                 for kind in input_vcfs.keys():
                     filter_vcf = os.path.join(work_dir, "{}_{}_{}.vcf".format(graph, sample, kind))
                     vstr = "-v snps,mnps" if kind is "snp" else "-V snps,mnps" if kind is "indel" else ""
+                    filter_strs = get_filter_string(region, sample, graph.replace(".vcf",""), options)
+                    fstr = filter_strs[0] if kind is "snp" else filter_strs[1] if kind is "indel" else filter_strs[2]
                     if options.clip is not None:
                         vstr += " -R {}".format(options.clip)
-                    run("bcftools view {} -f PASS,. {} | bcftools norm - -f {} > {}".format(
-                        pvcf, vstr, options.chrom_fa_path, filter_vcf))
+                    run("bcftools view {} {} {} | bcftools norm - -f {} > {}".format(
+                        pvcf, fstr, vstr, options.chrom_fa_path, filter_vcf))
                     run("bgzip -f {}".format(filter_vcf))
                     run("tabix -f -p vcf {}.gz".format(filter_vcf))
                     input_vcfs[kind].append("{}.gz".format(filter_vcf))

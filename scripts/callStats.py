@@ -24,6 +24,8 @@ def parse_args(args):
                         help="directory where output of this script will go")
     parser.add_argument("--clip", type=str, default=None,
                         help="bed regions to subset on")
+    parser.add_argument("--qual_dir", type=str, default=None,
+                        help="filter by given qualities.  should be tsv output folder of plotVariantsDistances.py")
                             
     args = args[1:]
         
@@ -60,36 +62,64 @@ def count_variants(vcf_path, filter_string, xref, kind, options):
     if options.clip is not None:
         vstr += " -R {}".format(options.clip)
     xstr = "grep XREF" if xref is True else "grep -v XREF"
-    cmd = "bcftools view {} -H -f {} {} | {} | wc -l".format(vcf_path, filter_string, vstr, xstr)
+    cmd = "bcftools view {} -H {} {} | {} | wc -l".format(vcf_path, filter_string, vstr, xstr)
     proc = subprocess.Popen(cmd, shell=True, bufsize=-1,
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     output, errors = proc.communicate()
     sts = proc.wait()
     assert sts == 0
     return int(output)
-
     
-def get_counts(vcfeval_dir, options):
+def get_counts(vcfeval_dir, filters, options):
     """ count up the true and false positives, break down by type and xrefness"""
+    f_snps, f_indels, f_tot = filters[0], filters[1], filters[2]
     tpvcf = os.path.join(vcfeval_dir, "tp.vcf.gz")
     fpvcf = os.path.join(vcfeval_dir, "fp.vcf.gz")
     counts = dict()
-    counts["TP-REF-SNP"] = count_variants(tpvcf, "PASS,.", True, "snps", options)
-    counts["TP-AUG-SNP"] = count_variants(tpvcf, "PASS,.", False, "snps", options)
-    counts["TP-REF-INDEL"] = count_variants(tpvcf, "PASS,.", True, "indels", options)
-    counts["TP-AUG-INDEL"] = count_variants(tpvcf, "PASS,.", False, "indels", options)
-    counts["TP-REF-TOTAL"] = counts["TP-REF-SNP"] + counts["TP-REF-INDEL"]
-    counts["TP-AUG-TOTAL"] = counts["TP-AUG-SNP"] + counts["TP-AUG-INDEL"]
+    counts["TP-REF-SNP"] = count_variants(tpvcf, f_snps, True, "snps", options)
+    counts["TP-AUG-SNP"] = count_variants(tpvcf, f_snps, False, "snps", options)
+    counts["TP-REF-INDEL"] = count_variants(tpvcf, f_indels, True, "indels", options)
+    counts["TP-AUG-INDEL"] = count_variants(tpvcf, f_indels, False, "indels", options)
+    counts["TP-REF-TOTAL"] = count_variants(tpvcf, f_tot, True, "snps", options) + count_variants(tpvcf, f_tot, True, "indels", options)
+    counts["TP-AUG-TOTAL"] = count_variants(tpvcf, f_tot, False, "snps", options) + count_variants(tpvcf, f_tot, False, "indels", options)
 
-    counts["FP-REF-SNP"] = count_variants(fpvcf, "PASS,.", True, "snps", options)
-    counts["FP-AUG-SNP"] = count_variants(fpvcf, "PASS,.", False, "snps", options)
-    counts["FP-REF-INDEL"] = count_variants(fpvcf, "PASS,.", True, "indels", options)
-    counts["FP-AUG-INDEL"] = count_variants(fpvcf, "PASS,.", False, "indels", options)
-    counts["FP-REF-TOTAL"] = counts["FP-REF-SNP"] + counts["FP-REF-INDEL"]
-    counts["FP-AUG-TOTAL"] = counts["FP-AUG-SNP"] + counts["FP-AUG-INDEL"]
+    counts["FP-REF-SNP"] = count_variants(fpvcf, f_snps, True, "snps", options)
+    counts["FP-AUG-SNP"] = count_variants(fpvcf, f_snps, False, "snps", options)
+    counts["FP-REF-INDEL"] = count_variants(fpvcf, f_indels, True, "indels", options)
+    counts["FP-AUG-INDEL"] = count_variants(fpvcf, f_indels, False, "indels", options)
+    counts["FP-REF-TOTAL"] = count_variants(fpvcf, f_tot, True, "snps", options) + count_variants(fpvcf, f_tot, True, "indels", options)
+    counts["FP-AUG-TOTAL"] = count_variants(fpvcf, f_tot, False, "snps", options) + count_variants(fpvcf, f_tot, False, "indels", options)
 
     return counts
-                        
+
+def get_filter_string(region, sample, graph, options):
+    """ get max-f1 qualities if specified 
+    return triple for (SNP, INDEL, TOTAL) """
+    if options.qual_dir is None:
+        return ["-f PASS,.", "-f PASS,.", "-f PASS,."]
+    else:
+        ret = []
+        for c in ["SNP", "INDEL", "TOT"]:
+            tsvpath = os.path.join(options.qual_dir,
+                                   "platvcf-vcfeval-{}-{}-f1qual-{}_{}-acc.tsv".format(region.lower(),
+                                                                                       sample.upper(),
+                                                                                       region.upper(),
+                                                                                       c))
+            print "open", tsvpath, "graph ", graph
+            with open(tsvpath) as f:
+                for line in f:
+                    toks = line.split()
+                    # 2nd clause temp hack for snp1kg_kp to run (note we arent using it)
+                    if toks[0] == graph or toks[0].replace("_","") == graph.replace("_",""):
+                        ret.append("\"-i QUAL>={}\"".format(float(toks[1])))
+                        print "found ", c, ret[-1]
+                        break
+        if len(ret) != 3:
+            sys.stderr.write("Warning coudnt get quality for {} {} {}".format(region, sample, graph))
+            return ["-f PASS,.", "-f PASS,.", "-f PASS,."]
+
+        return ret
+                                                                                                
 def do_all_counts(evalmap, options):
     """ count up all our tp and fp stats and return in table """
     # [region][sample][graph] -> counts
@@ -97,7 +127,8 @@ def do_all_counts(evalmap, options):
     for region, rd in evalmap.items():
         for sample, sd in rd.items():
             for graph, evaldir in sd.items():
-                count_table[region][sample][graph] = get_counts(evaldir, options)
+                filters = get_filter_string(region, sample, graph, options)
+                count_table[region][sample][graph] = get_counts(evaldir, filters, options)
 
     return count_table
     
