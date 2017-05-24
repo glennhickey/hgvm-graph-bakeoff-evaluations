@@ -162,7 +162,7 @@ DO_CALL=true
 CALL_OPTS="  "  # Use the defaults that Glenn coded in as the best parameter set
 #CALL_OPTS="-d 0 -e 5000 -s 3 -D 20 -n 0 -F 0.2 -B 250 -H 3 -R 4"
 # Defray all the way (as reads are << 999 bases long)
-FILTER_OPTS="-r ${ident} -d ${delta} -e ${delta} -afu -s ${secscore} -q 15 -o 0 --defray-ends 999"
+FILTER_OPTS="-r ${ident} -fu -s ${secscore} -q 15 -o 0 --defray-ends 999"
 VAR_OUT_DIR=${OUT_DIR}/primary_call_i_${ident}_delt_${delta}_ss_${secscore}
 COMP_OUT_DIR=${OUT_DIR}/primary_${qual}_i_${ident}_delt_${delta}_ss_${secscore}.${COMP_TAG}
 run_pipeline $VAR_OUT_DIR $COMP_OUT_DIR "$CALL_OPTS" "$PILEUP_OPTS" "$FILTER_OPTS" "$ROC_FLAG" $DO_CALL
