@@ -115,6 +115,10 @@ def parse_args(args):
                         help="name of the combined sample to generate")
     parser.add_argument("--tp_baseline", action="store_true", default=False,
                         help="use tp-baseline.vcf instead of tp.vcf from vcfeval output for precision and recall")
+    parser.add_argument("--vcfeval_options", default="--ref-overlap",
+                        help="misc. vcfeval options")
+    parser.add_argument("--vcfeval_gl", default=False,
+                        help="used GL instead of QUAL for vcfeval for freebayes and platypus")
                             
     args = args[1:]
 
@@ -1200,9 +1204,12 @@ def compute_vcf_comparison(job, graph1, graph2, options):
             #    ve_opts += " --bed-regions={}".format(options.clip)
             # indexing and compression was done by preprocessing phase
             run("rm -rf {}".format(out_path))
-            run("rtg vcfeval -b {}.gz -c {}.gz --all-records --ref-overlap --vcf-score-field QUAL -t {} {} -o {}".format(truth_vcf_path, query_vcf_path,
-                                                                                                                         options.chrom_sdf_path, ve_opts,
-                                                                                                                         out_path))
+            if method1 not in ["freebayes", "platypus"] or not options.vcfeval_gl:
+                ve_opts += " --vcf-score-field QUAL"
+            run("rtg vcfeval -b {}.gz -c {}.gz {} -t {} {} -o {}".format(truth_vcf_path, query_vcf_path,
+                                                                         options.vcfeval_options,
+                                                                         options.chrom_sdf_path, ve_opts,
+                                                                         out_path))
             tp_name = "tp-baseline" if options.tp_baseline is True else "tp"
             # count up output
             fn_path = os.path.join(out_path, "fn.vcf.gz")
