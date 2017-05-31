@@ -105,6 +105,8 @@ def parse_args(args):
                         help="used for vcfFilter for curves (when not --new): {xaad, ad, ll, xl}")
     parser.add_argument("--dedupe", action="store_true", default=False,
                         help="use --dedupe option in vcfFilterQuality.py")
+    parser.add_argument("--max_depth", type=int, default=0,
+                        help="use --max_depth option in vcfFilterQuality.py")    
     parser.add_argument("--vroc", action="store_true", default=False,
                         help="use vcfevals roc logic (only gives total, not indel snp breakdown) and wont work with clipping")
     parser.add_argument("--cwd", default=os.getcwd(),
@@ -1074,6 +1076,8 @@ def preprocess_vcf(job, graph, options):
                 filter_opts += " --{}".format(options.filter_type) if not options.new else " --ad"
                 if options.dedupe:
                     filter_opts += " --dedupe"
+                if options.max_depth:
+                    filter_opts += " --max_depth {}".format(options.max_depth)
 
             vcfFQcmd += "scripts/vcfFilterQuality.py - {} --pct {} --set_qual > {}".format(options.qpct,
                                                                                            filter_opts,
