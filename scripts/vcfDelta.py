@@ -40,7 +40,7 @@ def main(args):
         os.system("bgzip {} -c > {}.gz".format(options.vcf1, options.vcf1))
         vcf1 += ".gz"
     vcf2 = options.vcf2
-    if not options.vcf1[-7:] == ".vcf.gz":
+    if not options.vcf2[-7:] == ".vcf.gz":
         os.system("bgzip {} -c > {}.gz".format(options.vcf2, options.vcf2))
         vcf2 += ".gz"
 
