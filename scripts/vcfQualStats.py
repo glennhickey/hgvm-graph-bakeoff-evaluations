@@ -39,6 +39,7 @@ in 5th column of vcf """
     if bed_path is not None:
         assert vcf_path[-3:] == ".gz" # gotta be indexed
         cmd += " -R {}".format(bed_path)
+    cmd += " | vcfuniq"
     p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
                          stderr=sys.stderr, bufsize=-1)
     output, _ = p.communicate()

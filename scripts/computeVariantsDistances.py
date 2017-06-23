@@ -121,6 +121,8 @@ def parse_args(args):
                         help="misc. vcfeval options")
     parser.add_argument("--vcfeval_gl", default=False,
                         help="used GL instead of QUAL for vcfeval for freebayes and platypus")
+    parser.add_argument("--ar", default=False, action="store_true",
+                        help="use all records for vcfeval")
                             
     args = args[1:]
 
@@ -1203,9 +1205,13 @@ def compute_vcf_comparison(job, graph1, graph2, options):
             
         elif options.comp_type == "vcfeval":
             ve_opts = "" if options.gt else "--squash-ploidy"
-            # doesn't seem to work
+            if options.ar:
+                ve_opts += " --all-records"
+
+            # this never seems to work right in complex regions.  do clipping
+            # with bcftools on tp/fn/fp files instead
             #if options.clip:
-            #    ve_opts += " --bed-regions={}".format(options.clip)
+            #    ve_opts += " --evaluation-regions={}".format(options.clip)
             # indexing and compression was done by preprocessing phase
             run("rm -rf {}".format(out_path))
             if method1 not in ["freebayes", "platypus"] or not options.vcfeval_gl:
