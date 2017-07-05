@@ -179,10 +179,8 @@ def parse_args(args):
                         help="print some zoom-ins too")
     parser.add_argument("--range", help="distance range to plot on either side of max f1 pr dot",
                         type=float, default=0.1)
-    parser.add_argument("--downsample", help="comma-separated graphs to downsample",
-                        type=str, default="samtools,freebayes,platypus")
-    parser.add_argument("--ds_step", help="downsample step",
-                        type=int, default=20)
+    parser.add_argument("--max_steps", help="max points to display.  interpolate if more",
+                        type=int, default=100)
     parser.add_argument("--totals", help="only do overall plots",
                         action="store_true")
     parser.add_argument("--name", default="Platinum Genomes", help="Name for comparison")
@@ -224,7 +222,6 @@ def make_max_f1_tsv(acc_tsv_path, f1_tsv_path, f1_pr_tsv_path, f1_qual_tsv_path,
     """ flatten precision-recall tsv into single best f1 entry per graph """
     def f1(p, r):
         return 0 if p + r == 0 else 2. * ((p * r) / (p + r))
-    ds_names = options.downsample.split(",")
     max_f1 = defaultdict(int)
     max_pr = dict()
     max_qual = dict()
@@ -248,18 +245,19 @@ def make_max_f1_tsv(acc_tsv_path, f1_tsv_path, f1_pr_tsv_path, f1_qual_tsv_path,
             best_f1_line = pr_file[pr_score[2]]
             best_recall, best_precision = float(best_f1_line.split()[1]), float(best_f1_line.split()[2])
             # write all points that are within range of max f1 on either both axes
+            best_lines = []
             for i in range(0, len(pr_file)):
                 line = pr_file[i]
                 toks = line.split()
                 if toks[0] == name:
                     recall, precision = float(toks[1]), float(toks[2])
                     if abs(recall - best_recall) <= options.range and abs(precision - best_precision) <= options.range:
-                        # hack freebayes to make less caterpiller like line by downsampling more
-                        if name == "freebayes":
-                            if i % (options.ds_step * 10) == 0:
-                                f1_pr_file.write("{}\t{}\t{}\n".format(name, recall, precision))
-                        elif name not in ds_names or i % options.ds_step == 0:
-                            f1_pr_file.write("{}\t{}\t{}\n".format(name, recall, precision))
+                        best_lines.append((name, recall, precision))
+                                    
+            ds_step = max(1, int((len(best_lines)) / options.max_steps))
+            for i, line in enumerate(best_lines):
+                if i % ds_step == 0 or i == 0 or i == len(best_lines) - 1:                    
+                    f1_pr_file.write("{}\t{}\t{}\n".format(line[0], line[1], line[2]))
                             
             # write the single max f1 point as precision recall
             toks = best_f1_line.split()
