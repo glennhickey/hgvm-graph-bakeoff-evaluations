@@ -22,6 +22,7 @@ from computeVariantsDistances import vcf_dist_header, read_tsv, write_tsv
 # Set up the plot parameters
 # Include both versions of the 1kg SNPs graph name
 # copied from plotVariantComparison.sh
+
 PLOT_PARAMS = [
     "--categories",
     "snp1kg",
@@ -145,16 +146,39 @@ PLOT_PARAMS = [
     "\"#fabf1f\"",
     "--font_size 20 --dpi 90"]
 
-def name_map():
+def make_filter_params(plot_params):
+    # hack plot params to contain duplicate category
+    p = []
+    cat = None
+    for param in plot_params:
+        if param.startswith("--"):
+            cat = param
+            p.append(param)
+        else:
+            p.append(param)
+            if cat == "--categories":
+                p.append(param + ".filter")
+            elif cat == "--category_labels ":
+                p.append(".".format(param))
+            else:
+                p.append(param)
+    num_cats = plot_params.index("--category_labels ") - plot_params.index("--categories") + 1
+    p.append("--markers")
+    for i in range(num_cats):
+        p.append("o")
+        p.append("+")
+    return p
+
+def name_map(options):
     """ make a dictionary from the list above """
-    i = PLOT_PARAMS.index("--categories")
-    j = PLOT_PARAMS.index("--category_labels ")
+    i = options.plot_params.index("--categories")
+    j = options.plot_params.index("--category_labels ")
 
     names = dict()
     for k in range(i + 1, j):
-        if PLOT_PARAMS[k][0:2] == "--":
+        if options.plot_params[k][0:2] == "--":
             break
-        names[PLOT_PARAMS[i + k]] = PLOT_PARAMS[j + k].replace("\"", "")
+        names[options.plot_params[i + k]] = options.plot_params[j + k].replace("\"", "")
 
     # hack in sample-<name> and base-<name> maps
     keys = [k for k in names.keys()]
@@ -180,11 +204,12 @@ def parse_args(args):
     parser.add_argument("--range", help="distance range to plot on either side of max f1 pr dot",
                         type=float, default=0.1)
     parser.add_argument("--max_steps", help="max points to display.  interpolate if more",
-                        type=int, default=100)
+                        type=int, default=50)
     parser.add_argument("--totals", help="only do overall plots",
                         action="store_true")
-    parser.add_argument("--name", default="Platinum Genomes", help="Name for comparison")
-                        
+    parser.add_argument("--name", default="Platinum Genomes", help="Name for comparison")                        
+    parser.add_argument("--filter_comp_dir", type=str, default="None",
+                        help="another comparison directory to show with comp_dir")
 
                             
     args = args[1:]
@@ -203,7 +228,7 @@ def plot_kmer_comp(tsv_path, options):
     sample = out_name.split("-")[-1].upper()
     region = out_name.split("-")[-2].upper()
 
-    params = " ".join(PLOT_PARAMS)
+    params = " ".join(options.plot_params)
     # jaccard boxplot
     jac_tsv = out_base_path + "_jac.tsv"
     awkstr = '''awk '{if (NR!=1) print $1 "\t" $2}' '''
@@ -286,7 +311,7 @@ def plot_vcf_comp(tsv_path, options):
         robust_makedirs(os.path.dirname(ret))
         return ret
 
-    params = " ".join(PLOT_PARAMS)
+    params = " ".join(options.plot_params)
 
     # precision recall scatter plot
     header = vcf_dist_header(options)
@@ -318,7 +343,7 @@ def plot_vcf_comp(tsv_path, options):
             title += "{} Accuracy".format(options.name)
         else:
             title += "{} {} Accuracy".format(options.name, comp_cat.title())
-        if sample.upper() != "COMBINED":
+        if sample.upper() != "COMBINED" and "JOIN" not in sample.upper():
             title += ", " + sample.upper()
         if region.upper() != "TOTAL" and region.upper() != sample.upper():
             title += ", {}".format(region)
@@ -339,55 +364,23 @@ def plot_vcf_comp(tsv_path, options):
 
 
         make_max_f1_tsv(acc_tsv, f1_tsv, f1_pr_tsv, f1_qual_tsv, f1_scat_tsv, options)
-        cmd = "scripts/barchart.py {} --ascending --no_n --save {} --title \"{}\" --x_sideways --x_label \"Graph\" --y_label \"Max. F1-Score\" {}".format(f1_tsv, f1_png, title, params)
-        print cmd
-        os.system(cmd)
+
         cmd = "scripts/scatter.py {} --save {} --title \"{}\" --x_label \"Recall\" --y_label \"Precision\" --width 9 --height 9 {} --lines --no_n --line_width 1.5 --marker_size 5 --annotate --no_legend".format(f1_pr_tsv, f1_pr_png, title, params)
         print cmd
         os.system(cmd)
-        cmd = "scripts/barchart.py {} --ascending --no_n --save {} --title \"{}\" --x_sideways --x_label \"Graph\" --y_label \"Quality for Max. F1-Score\" {}".format(f1_qual_tsv, f1_qual_png, title, params)
-        print cmd
-        os.system(cmd)
-        cmd = "scripts/scatter.py {} --save {} --title \"{}\" --x_label \"Recall\" --y_label \"Precision\" --width 9 --height 9 {} --lines --no_n --line_width 1.5 --marker_size 5 --annotate --no_legend".format(f1_scat_tsv, f1_scat_png, title, params)
-        print cmd
-        os.system(cmd)
 
-#        if False:
-        if options.top is True:           
-            # top 20
-            cmd = "scripts/scatter.py {} --save {} --title \"{}\" --x_label \"Recall\" --y_label \"Precision\" --width 18 --height 9 {} --lines --no_n --line_width 1.5 --marker_size 5 --min_x 0.798 --max_x 1.002 --min_y 0.798 --max_y 1.002".format(acc_tsv, acc_png.replace(".png", "_top20.png"), title, params)
+        if not options.filter_comp_dir:
+            cmd = "scripts/barchart.py {} --ascending --no_n --save {} --title \"{}\" --x_sideways --x_label \"Graph\" --y_label \"Max. F1-Score\" {}".format(f1_tsv, f1_png, title, params)
             print cmd
             os.system(cmd)
-            # top 20
-            cmd = "scripts/scatter.py {} --save {} --title \"{}\" --x_label \"Recall\" --y_label \"Precision\" --width 11 --height 5.5 {} --lines --no_n --line_width 1.5 --marker_size 5 --min_x 0.796 --max_x 1.004 --min_y 0.796 --max_y 1.004".format(acc_tsv, acc_png.replace(".png", "_top20_inset.png"), title, params)
-            print cmd
-            os.system(cmd)        
-            # top 40
-            cmd = "scripts/scatter.py {} --save {} --title \"{}\" --x_label \"Recall\" --y_label \"Precision\" --width 18 --height 9 {} --lines --no_n --line_width 1.5 --marker_size 5 --min_x 0.596 --max_x 1.004 --min_y 0.596 --max_y 1.004".format(acc_tsv, acc_png.replace(".png", "_top40.png"), title, params)
+            cmd = "scripts/barchart.py {} --ascending --no_n --save {} --title \"{}\" --x_sideways --x_label \"Graph\" --y_label \"Quality for Max. F1-Score\" {}".format(f1_qual_tsv, f1_qual_png, title, params)
             print cmd
             os.system(cmd)
-            # top .5 bar
-            cmd = "scripts/barchart.py {} --ascending --no_n --save {} --title \"{}\" --x_sideways --x_label \"Graph\" --y_label \"Max. F1-Score\" {} --min 0.5".format(f1_tsv, f1_png.replace(".png", "_top50.png"), title, params)
-            print cmd
-            os.system(cmd)
-            # top .6 bar
-            cmd = "scripts/barchart.py {} --ascending --no_n --save {} --title \"{}\" --x_sideways --x_label \"Graph\" --y_label \"Max. F1-Score\" {} --min 0.6".format(f1_tsv, f1_png.replace(".png", "_top60.png"), title, params)
-            print cmd
-            os.system(cmd)
-            # top .7 bar
-            cmd = "scripts/barchart.py {} --ascending --no_n --save {} --title \"{}\" --x_sideways --x_label \"Graph\" --y_label \"Max. F1-Score\" {} --min 0.7".format(f1_tsv, f1_png.replace(".png", "_top70.png"), title, params)
-            print cmd
-            os.system(cmd)            
-            # top .85 bar
-            cmd = "scripts/barchart.py {} --ascending --no_n --save {} --title \"{}\" --x_sideways --x_label \"Graph\" --y_label \"Max. F1-Score\" {} --min 0.85".format(f1_tsv, f1_png.replace(".png", "_top85.png"), title, params)
+            cmd = "scripts/scatter.py {} --save {} --title \"{}\" --x_label \"Recall\" --y_label \"Precision\" --width 9 --height 9 {} --lines --no_n --line_width 1.5 --marker_size 5 --annotate --no_legend".format(f1_scat_tsv, f1_scat_png, title, params)
             print cmd
             os.system(cmd)
 
-            # top .95 bar
-            cmd = "scripts/barchart.py {} --ascending --no_n --save {} --title \"{}\" --x_sideways --x_label \"Graph\" --y_label \"Max. F1-Score\" {} --min 0.95".format(f1_tsv, f1_png.replace(".png", "_top95.png"), title, params)
-            print cmd
-            os.system(cmd)
-            
+        if options.top is True:
             # top .25 f1pr scatter
             cmd = "scripts/scatter.py {} --save {} --title \"{}\" --x_label \"Recall\" --y_label \"Precision\" --width 9 --height 9 {} --lines --no_n --line_width 1.5 --marker_size 5 --min_x 0.746 --max_x 1.004 --min_y 0.746 --max_y 1.004 --annotate --no_legend".format(f1_pr_tsv, f1_pr_png.replace(".png", "_top25.png"), title, params)
             print cmd
@@ -423,6 +416,41 @@ def plot_vcf_comp(tsv_path, options):
             print cmd
             os.system(cmd)
 
+        if not options.filter_comp_dir and options.top is True:
+            # top 20
+            cmd = "scripts/scatter.py {} --save {} --title \"{}\" --x_label \"Recall\" --y_label \"Precision\" --width 18 --height 9 {} --lines --no_n --line_width 1.5 --marker_size 5 --min_x 0.798 --max_x 1.002 --min_y 0.798 --max_y 1.002".format(acc_tsv, acc_png.replace(".png", "_top20.png"), title, params)
+            print cmd
+            os.system(cmd)
+            # top 20
+            cmd = "scripts/scatter.py {} --save {} --title \"{}\" --x_label \"Recall\" --y_label \"Precision\" --width 11 --height 5.5 {} --lines --no_n --line_width 1.5 --marker_size 5 --min_x 0.796 --max_x 1.004 --min_y 0.796 --max_y 1.004".format(acc_tsv, acc_png.replace(".png", "_top20_inset.png"), title, params)
+            print cmd
+            os.system(cmd)        
+            # top 40
+            cmd = "scripts/scatter.py {} --save {} --title \"{}\" --x_label \"Recall\" --y_label \"Precision\" --width 18 --height 9 {} --lines --no_n --line_width 1.5 --marker_size 5 --min_x 0.596 --max_x 1.004 --min_y 0.596 --max_y 1.004".format(acc_tsv, acc_png.replace(".png", "_top40.png"), title, params)
+            print cmd
+            os.system(cmd)
+            # top .5 bar
+            cmd = "scripts/barchart.py {} --ascending --no_n --save {} --title \"{}\" --x_sideways --x_label \"Graph\" --y_label \"Max. F1-Score\" {} --min 0.5".format(f1_tsv, f1_png.replace(".png", "_top50.png"), title, params)
+            print cmd
+            os.system(cmd)
+            # top .6 bar
+            cmd = "scripts/barchart.py {} --ascending --no_n --save {} --title \"{}\" --x_sideways --x_label \"Graph\" --y_label \"Max. F1-Score\" {} --min 0.6".format(f1_tsv, f1_png.replace(".png", "_top60.png"), title, params)
+            print cmd
+            os.system(cmd)
+            # top .7 bar
+            cmd = "scripts/barchart.py {} --ascending --no_n --save {} --title \"{}\" --x_sideways --x_label \"Graph\" --y_label \"Max. F1-Score\" {} --min 0.7".format(f1_tsv, f1_png.replace(".png", "_top70.png"), title, params)
+            print cmd
+            os.system(cmd)            
+            # top .85 bar
+            cmd = "scripts/barchart.py {} --ascending --no_n --save {} --title \"{}\" --x_sideways --x_label \"Graph\" --y_label \"Max. F1-Score\" {} --min 0.85".format(f1_tsv, f1_png.replace(".png", "_top85.png"), title, params)
+            print cmd
+            os.system(cmd)
+
+            # top .95 bar
+            cmd = "scripts/barchart.py {} --ascending --no_n --save {} --title \"{}\" --x_sideways --x_label \"Graph\" --y_label \"Max. F1-Score\" {} --min 0.95".format(f1_tsv, f1_png.replace(".png", "_top95.png"), title, params)
+            print cmd
+            os.system(cmd)
+            
 
             # top .50 f1scat 
             cmd = "scripts/scatter.py {} --save {} --title \"{}\" --x_label \"Recall\" --y_label \"Precision\" --width 9 --height 9 {} --lines --no_n --line_width 1.5 --marker_size 5 --annotate --no_legend --min_x 0.496 --max_x 1.004 --min_y 0.496 --max_y 1.004".format(f1_scat_tsv, f1_scat_png.replace(".png", "_top50.png"), title, params)
@@ -470,7 +498,7 @@ def plot_heatmap(tsv, options):
     out_dir = os.path.join(options.comp_dir, "heatmaps")
     robust_makedirs(out_dir)
     mat, col_names, row_names, row_label = read_tsv(tsv)
-    names = name_map()
+    names = name_map(options)
 
     for i in range(len(col_names)):
         if col_names[i] in names:
@@ -499,6 +527,10 @@ def main(args):
     
     options = parse_args(args)
 
+    # if we have a separated "filter" input directory, we double up all our options to include
+    # .filter versions of everything.  
+    options.plot_params = PLOT_PARAMS if not options.filter_comp_dir else make_filter_params(PLOT_PARAMS)
+
     # look through tsvs in comp_tables
     for tsv in glob.glob(os.path.join(options.comp_dir, "comp_tables", "*.tsv")):
         if "hm" in os.path.basename(tsv).split("-"):
@@ -507,8 +539,22 @@ def main(args):
             plot_kmer_comp(tsv, options)
         elif "vcf" in os.path.basename(tsv).split("-") or "sompy" in tsv.split("-") \
              or "happy" in tsv.split("-") or "vcfeval" in tsv.split("-"):
+            if options.filter_comp_dir:
+                filter_tsv = tsv.replace(options.comp_dir, options.filter_comp_dir)
+                if os.path.isfile(filter_tsv):
+                    # we merge on our "filter tsv" to the input tsv adding .filter to all the names
+                    # in the first column
+                    join_tsv = tsv.replace(".tsv", ".join.tsv")
+                    shutil.copy2(tsv, join_tsv)
+                    with open(join_tsv, "a") as jt, open(filter_tsv) as ft:
+                        for line in ft:
+                            toks = line.split()
+                            if toks[0] != "Graph":
+                                jt.write(toks[0]  + ".filter" + "\t" + "\t".join(toks[1:]) + "\n")
+                    tsv = join_tsv
+                
             plot_vcf_comp(tsv, options)
-                                
+                                                                
 
 if __name__ == "__main__" :
     sys.exit(main(sys.argv))

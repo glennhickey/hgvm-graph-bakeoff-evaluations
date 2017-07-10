@@ -592,18 +592,19 @@ def main(args):
             # For each series
             for i in xrange(len(label_positions[series_name][0])):
                 # For each label position
-        
-                # Label the point with an arrow in the correct color
-                # Make sure to center the text on the text position
-                pyplot.gca().annotate(category_names[series_name], 
-                    xy=(to_label[series_name][0][i],
-                    to_label[series_name][1][i]), 
-                    xytext=(label_positions[series_name][0][i],
-                    label_positions[series_name][1][i]),
-                    color=series_color,
-                    horizontalalignment="center",
-                    verticalalignment="center",
-                    arrowprops=dict(arrowstyle="->", color=series_color))
+
+                if category_names[series_name] != ".":
+                    # Label the point with an arrow in the correct color
+                    # Make sure to center the text on the text position
+                    pyplot.gca().annotate(category_names[series_name], 
+                                          xy=(to_label[series_name][0][i],
+                                              to_label[series_name][1][i]), 
+                                          xytext=(label_positions[series_name][0][i],
+                                                  label_positions[series_name][1][i]),
+                                          color=series_color,
+                                          horizontalalignment="center",
+                                          verticalalignment="center",
+                                          arrowprops=dict(arrowstyle="->", color=series_color))
         
         
     if options.sparse_ticks:
